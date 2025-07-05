@@ -3,16 +3,33 @@
 # Entry point for the Streamlit PDF chat app 
 
 import streamlit as st
+st.set_page_config(page_title="Chat with PDFs", layout="wide")
 from PyPDF2 import PdfReader
 from sentence_transformers import SentenceTransformer
 import numpy as np
 import faiss
-from transformers import pipeline
+from transformers import AutoTokenizer, pipeline
 from dotenv import load_dotenv
+import os
+import time
 
 load_dotenv()
 
-st.set_page_config(page_title="Chat with PDFs", layout="wide")
+@st.cache_resource
+def load_llm():
+    return pipeline(
+        "text-generation",
+        model="mistralai/Mistral-7B-Instruct-v0.1",
+        tokenizer="mistralai/Mistral-7B-Instruct-v0.1",
+        max_new_tokens=256,
+        do_sample=True,
+        temperature=0.2,
+        top_p=0.95,
+        device_map="auto" 
+    )
+
+llm = load_llm()
+
 st.title("📄 Chat with Your PDFs")
 
 uploaded_files = st.file_uploader(
@@ -72,26 +89,24 @@ if uploaded_files:
     if user_question:
         # Retrieve top relevant chunks
         question_embedding = model.encode([user_question]).astype('float32')
-        D, I = index.search(question_embedding, k=5)
-        retrieved_chunks = [chunks[i] for i in I[0] if i < len(chunks)]
+        D, I = index.search(question_embedding, k=3)
+        retrieved_chunks = [chunks[i] for i in I[0] if 0 <= i < len(chunks)]
         context = "\n".join(retrieved_chunks)
+        max_context_chars = 1000  # For Mistral, can use a larger context
+        if len(context) > max_context_chars:
+            context = context[:max_context_chars]
+        prompt = f"Context: {context}\n\nQuestion: {user_question}\nAnswer:"
 
         st.write("**Retrieved context:**")
         st.code(context[:1000] + ("..." if len(context) > 1000 else ""))
 
         with st.spinner("Generating answer with Mistral-7B-Instruct-v0.1..."):
-            llm = pipeline(
-                "text-generation",
-                model="mistralai/Mistral-7B-Instruct-v0.1",
-                tokenizer="mistralai/Mistral-7B-Instruct-v0.1",
-                max_new_tokens=256,
-                do_sample=True,
-                temperature=0.2,
-                top_p=0.95,
-                use_auth_token=True  # Uses HF token from env if set
-            )
-            prompt = f"Context: {context}\n\nQuestion: {user_question}\nAnswer:"
+            start = time.time()
+
             result = llm(prompt)
+            end = time.time()
+            st.write(f"Time taken: {end - start:.2f} seconds")
+
             if isinstance(result, list) and "generated_text" in result[0]:
                 answer = result[0]["generated_text"][len(prompt):].strip()
             else:

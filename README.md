@@ -16,7 +16,7 @@ This project is a lightweight, interactive PDF question-answering tool built wit
 - 🔓 100% free to run — no OpenAI API key required
 
 🛠️ Technologies:
-- LangChain
+- Retrieval-Augmented Generation (RAG)
 - FAISS for vector storage
 - Hugging Face Hub (LLMs + Embeddings)
 - Streamlit for frontend
